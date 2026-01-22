@@ -1,24 +1,94 @@
-pipeline{
-    agent any
-    stages{
-        stage('Clone repo'){
-            steps{
-                git branch: 'main', url: 'https://github.com/SMahmood-dot/DevOps-Project-Two-Tier-Flask-App.git'
-'
-            }
-        }
-        stage('Build image'){
-            steps{
-                sh 'docker build -t flask-app .'
-            }
-        }
-        stage('Deploy with docker compose'){
-            steps{
-                // existing container if they are running
-                sh 'docker compose down || true'
-                // start app, rebuilding flask image
-                sh 'docker compose up -d --build'
-            }
-        }
+pipeline {
+  agent any
+
+  environment {
+    ECR_REPO = "flask-app"   // <-- must match your ECR repo name
+  }
+
+  stages {
+    stage("Checkout") {
+      steps {
+        checkout scm
+      }
     }
+
+    stage("Resolve ECR Image URI") {
+      steps {
+        sh '''
+          set -e
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+          # Region from EC2 metadata (works on EC2)
+          AWS_REGION=$(curl -s http://169.254.169.254/latest/dynamic/instance-identity/document | grep region | awk -F\\" '{print $4}')
+
+          ECR_REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+          IMAGE_TAG="${GIT_COMMIT:0:8}"
+          IMAGE_URI="$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
+
+          echo "AWS_REGION=$AWS_REGION" > aws.env
+          echo "ECR_REGISTRY=$ECR_REGISTRY" >> aws.env
+          echo "IMAGE_URI=$IMAGE_URI" >> aws.env
+
+          cat aws.env
+        '''
+      }
+    }
+
+    stage("ECR Login") {
+      steps {
+        sh '''
+          set -e
+          . ./aws.env
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+        '''
+      }
+    }
+
+    stage("Build Docker Image") {
+      steps {
+        sh '''
+          set -e
+          . ./aws.env
+          docker build -t "$IMAGE_URI" .
+        '''
+      }
+    }
+
+    stage("Push Image to ECR") {
+      steps {
+        sh '''
+          set -e
+          . ./aws.env
+          docker push "$IMAGE_URI"
+        '''
+      }
+    }
+
+    stage("Deploy from ECR (docker compose)") {
+      steps {
+        sh '''
+          set -e
+          . ./aws.env
+
+          # docker-compose.yml uses ${ECR_IMAGE}
+          export ECR_IMAGE="$IMAGE_URI"
+
+          docker compose down || true
+          docker compose up -d
+
+          docker ps
+        '''
+      }
+    }
+
+    stage("Health Check") {
+      steps {
+        sh '''
+          set -e
+          sleep 6
+          curl -f http://localhost:5000/health || (docker compose logs --tail=200 && exit 1)
+        '''
+      }
+    }
+  }
 }
