@@ -1,8 +1,10 @@
 pipeline {
   agent any
 
+  options { skipDefaultCheckout(true) }
+
   environment {
-    ECR_REPO = "flask-app"   
+    ECR_REPO = "flask-app"
   }
 
   stages {
@@ -18,17 +20,23 @@ pipeline {
           set -e
           AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
-          # Region from EC2 metadata (works on EC2)
-          AWS_REGION=$(curl -s http://169.254.169.254/latest/dynamic/instance-identity/document | grep region | awk -F\\" '{print $4}')
+          AWS_REGION=$(aws configure get region || true)
+          if [ -z "$AWS_REGION" ]; then
+            AWS_REGION=$(curl -s http://169.254.169.254/latest/dynamic/instance-identity/document | sed -n 's/.*"region"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p')
+          fi
+
+          if [ -z "$AWS_REGION" ]; then
+            echo "ERROR: Could not determine AWS region."
+            exit 1
+          fi
 
           ECR_REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
-          IMAGE_TAG="${GIT_COMMIT:0:8}"
+          IMAGE_TAG=$(echo "$GIT_COMMIT" | cut -c1-8)
           IMAGE_URI="$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
 
           echo "AWS_REGION=$AWS_REGION" > aws.env
           echo "ECR_REGISTRY=$ECR_REGISTRY" >> aws.env
           echo "IMAGE_URI=$IMAGE_URI" >> aws.env
-
           cat aws.env
         '''
       }
@@ -69,8 +77,6 @@ pipeline {
         sh '''
           set -e
           . ./aws.env
-
-          # docker-compose.yml uses ${ECR_IMAGE}
           export ECR_IMAGE="$IMAGE_URI"
 
           docker compose down || true
@@ -86,7 +92,7 @@ pipeline {
         sh '''
           set -e
           sleep 6
-          curl -f http://localhost:5000/health || (docker compose logs --tail=200 && exit 1)
+          curl -f http://localhost:5000/ || (docker compose logs --tail=200 && exit 1)
         '''
       }
     }
