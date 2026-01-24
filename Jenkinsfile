@@ -4,6 +4,7 @@ pipeline {
   options { skipDefaultCheckout(true) }
 
   environment {
+    AWS_REGION = "us-east-2"
     ECR_REPO = "flask-app"
   }
 
@@ -14,33 +15,23 @@ pipeline {
       }
     }
 
-    stage("Resolve ECR Image URI") {
-      steps {
-        sh '''
-          set -e
-          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+stage("Resolve ECR Image URI") {
+  steps {
+    sh '''
+      set -e
+      AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      ECR_REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+      IMAGE_TAG=$(echo "$GIT_COMMIT" | cut -c1-8)
+      IMAGE_URI="$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
 
-          AWS_REGION=$(aws configure get region || true)
-          if [ -z "$AWS_REGION" ]; then
-            AWS_REGION=$(curl -s http://169.254.169.254/latest/dynamic/instance-identity/document | sed -n 's/.*"region"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p')
-          fi
+      echo "AWS_REGION=$AWS_REGION" > aws.env
+      echo "ECR_REGISTRY=$ECR_REGISTRY" >> aws.env
+      echo "IMAGE_URI=$IMAGE_URI" >> aws.env
 
-          if [ -z "$AWS_REGION" ]; then
-            echo "ERROR: Could not determine AWS region."
-            exit 1
-          fi
-
-          ECR_REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
-          IMAGE_TAG=$(echo "$GIT_COMMIT" | cut -c1-8)
-          IMAGE_URI="$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
-
-          echo "AWS_REGION=$AWS_REGION" > aws.env
-          echo "ECR_REGISTRY=$ECR_REGISTRY" >> aws.env
-          echo "IMAGE_URI=$IMAGE_URI" >> aws.env
-          cat aws.env
-        '''
-      }
-    }
+      cat aws.env
+    '''
+  }
+}
 
     stage("ECR Login") {
       steps {
