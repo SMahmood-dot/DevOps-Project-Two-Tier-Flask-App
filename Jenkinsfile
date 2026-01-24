@@ -16,6 +16,19 @@ pipeline {
       }
     }
 
+stage("DEBUG: show Jenkinsfile + HEAD") {
+  steps {
+    sh '''
+      set -e
+      echo "----- Jenkinsfile (first 120 lines) -----"
+      sed -n '1,120p' Jenkinsfile
+      echo "----- git HEAD -----"
+      git rev-parse HEAD
+      git log -1 --oneline
+    '''
+  }
+}
+
 stage("Resolve ECR Image URI") {
   steps {
     sh '''
