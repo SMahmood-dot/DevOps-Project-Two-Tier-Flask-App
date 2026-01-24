@@ -2,7 +2,7 @@ pipeline {
   agent any
 
   environment {
-    ECR_REPO = "flask-app"   // <-- must match your ECR repo name
+    ECR_REPO = "flask-app"   
   }
 
   stages {
