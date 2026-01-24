@@ -5,33 +5,34 @@ pipeline {
 
   environment {
     AWS_REGION = "us-east-2"
-    ECR_REPO = "flask-app"
+    ECR_REPO   = "flask-app"
   }
 
   stages {
+
     stage("Checkout") {
       steps {
         checkout scm
       }
     }
 
-stage("Resolve ECR Image URI") {
-  steps {
-    sh '''
-      set -e
-      AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-      ECR_REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
-      IMAGE_TAG=$(echo "$GIT_COMMIT" | cut -c1-8)
-      IMAGE_URI="$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
+    stage("Resolve ECR Image URI") {
+      steps {
+        sh '''
+          set -e
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+          IMAGE_TAG=$(echo "$GIT_COMMIT" | cut -c1-8)
+          IMAGE_URI="$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
 
-      echo "AWS_REGION=$AWS_REGION" > aws.env
-      echo "ECR_REGISTRY=$ECR_REGISTRY" >> aws.env
-      echo "IMAGE_URI=$IMAGE_URI" >> aws.env
+          echo "AWS_REGION=$AWS_REGION" > aws.env
+          echo "ECR_REGISTRY=$ECR_REGISTRY" >> aws.env
+          echo "IMAGE_URI=$IMAGE_URI" >> aws.env
 
-      cat aws.env
-    '''
-  }
-}
+          cat aws.env
+        '''
+      }
+    }
 
     stage("ECR Login") {
       steps {
@@ -87,5 +88,6 @@ stage("Resolve ECR Image URI") {
         '''
       }
     }
+
   }
 }
