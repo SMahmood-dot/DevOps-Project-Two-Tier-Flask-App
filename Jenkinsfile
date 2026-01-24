@@ -16,23 +16,25 @@ pipeline {
       }
     }
 
-    stage("Resolve ECR Image URI") {
-      steps {
-        sh '''
-          set -e
-          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          ECR_REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
-          IMAGE_TAG=$(echo "$GIT_COMMIT" | cut -c1-8)
-          IMAGE_URI="$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
+stage("Resolve ECR Image URI") {
+  steps {
+    sh '''
+      set -e
+      AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      ECR_REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
 
-          echo "AWS_REGION=$AWS_REGION" > aws.env
-          echo "ECR_REGISTRY=$ECR_REGISTRY" >> aws.env
-          echo "IMAGE_URI=$IMAGE_URI" >> aws.env
+      IMAGE_TAG=$(git rev-parse --short=8 HEAD)
+      IMAGE_URI="$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
 
-          cat aws.env
-        '''
-      }
-    }
+      echo "AWS_REGION=$AWS_REGION" > aws.env
+      echo "ECR_REGISTRY=$ECR_REGISTRY" >> aws.env
+      echo "IMAGE_URI=$IMAGE_URI" >> aws.env
+
+      cat aws.env
+    '''
+  }
+}
+
 
     stage("ECR Login") {
       steps {
